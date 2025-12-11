@@ -99,8 +99,12 @@ async fn main() -> Result<()> {
 
     let routes = gtfs_rt_route.or(platforms_route).boxed();
 
-    tokio::spawn(warp::serve(routes).run(([0, 0, 0, 0], 3000)));
-    println!("Server running at http://localhost:3000");
+    let server_port: u16 = std::env::var("PORT")
+        .unwrap_or_else(|_| "3000".to_string())
+        .parse()
+        .expect("Invalid PORT env variable");
+    tokio::spawn(warp::serve(routes).run(([0, 0, 0, 0], server_port)));
+    println!("Server running at http://localhost:{}", server_port);
 
     // 6. Connect to Darwin Push Port (Manual STOMP Implementation)
     let username = std::env::var("DARWIN_USER").expect("DARWIN_USER not set");
