@@ -1,29 +1,47 @@
 use anyhow::{Context, Result};
-use gtfs_structures::Gtfs;
+use chrono::{Datelike, NaiveDate};
+use gtfs_structures::{Calendar, CalendarDate, Exception, Gtfs, Trip};
 use std::collections::HashMap;
-use std::io::copy;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use tempfile::Builder;
-use zip::ZipArchive;
+
+pub struct GtfsData {
+    pub tiploc_map: HashMap<String, String>,
+    pub uid_index: HashMap<String, Vec<String>>, // UID -> List of TripIDs
+    pub trips: HashMap<String, Trip>,
+    pub calendar: HashMap<String, Calendar>,
+    pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
+}
+
+impl Default for GtfsData {
+    fn default() -> Self {
+        Self {
+            tiploc_map: HashMap::new(),
+            uid_index: HashMap::new(),
+            trips: HashMap::new(),
+            calendar: HashMap::new(),
+            calendar_dates: HashMap::new(),
+        }
+    }
+}
 
 pub struct GTFSManager {
     url: String,
     // Use Arc<RwLock> to allow safe sharing between the updater thread and the main application
-    tiploc_map: Arc<RwLock<HashMap<String, String>>>,
+    data: Arc<RwLock<GtfsData>>,
 }
 
 impl GTFSManager {
     pub fn new(url: String) -> Self {
         Self {
             url,
-            tiploc_map: Arc::new(RwLock::new(HashMap::new())),
+            data: Arc::new(RwLock::new(GtfsData::default())),
         }
     }
 
     pub fn start_updater(&self) {
-        let map_clone = self.tiploc_map.clone();
+        let data_clone = self.data.clone();
         let url = self.url.clone();
 
         thread::spawn(move || {
@@ -31,10 +49,10 @@ impl GTFSManager {
                 log_info("Updating GTFS data...");
                 match Self::download_and_load(&url) {
                     Ok(new_gtfs) => {
-                        let new_map = Self::build_tiploc_map(&new_gtfs);
+                        let new_data = Self::build_indices(&new_gtfs);
                         {
-                            let mut m = map_clone.write().unwrap();
-                            *m = new_map;
+                            let mut d = data_clone.write().unwrap();
+                            *d = new_data;
                         }
                         log_info("GTFS data updated successfully.");
                     }
@@ -52,27 +70,84 @@ impl GTFSManager {
     pub fn load_initial(&self) -> Result<()> {
         log_info("Performing initial GTFS load...");
         let new_gtfs = Self::download_and_load(&self.url)?;
-        let new_map = Self::build_tiploc_map(&new_gtfs);
+        let new_data = Self::build_indices(&new_gtfs);
 
         {
-            let mut m = self.tiploc_map.write().unwrap();
-            *m = new_map;
+            let mut d = self.data.write().unwrap();
+            *d = new_data;
         }
         log_info("Initial GTFS load complete.");
         Ok(())
     }
 
     pub fn get_stop_id(&self, tiploc: &str) -> Option<String> {
-        let map = self.tiploc_map.read().unwrap();
+        let data = self.data.read().unwrap();
         // Try exact match first
-        if let Some(id) = map.get(tiploc) {
+        if let Some(id) = data.tiploc_map.get(tiploc) {
             return Some(id.clone());
         }
         None
     }
 
+    pub fn unwrap_stop_id(&self, tiploc: &str) -> String {
+        self.get_stop_id(tiploc).unwrap_or(tiploc.to_string())
+    }
+
+    pub fn find_trip_id(&self, uid: &str, date: NaiveDate) -> Option<String> {
+        let data = self.data.read().unwrap();
+
+        // 1. Look up candidates by UID
+        if let Some(candidates) = data.uid_index.get(uid) {
+            for trip_id in candidates {
+                // 2. Check service calendar
+                if let Some(trip) = data.trips.get(trip_id) {
+                    if self.service_runs_on_date(&data, &trip.service_id, date) {
+                        return Some(trip_id.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn service_runs_on_date(&self, data: &GtfsData, service_id: &str, date: NaiveDate) -> bool {
+        // Check CalendarDates (Exceptions) first
+        if let Some(exceptions) = data.calendar_dates.get(service_id) {
+            for exception in exceptions {
+                if exception.date == date {
+                    if exception.exception_type == Exception::Added {
+                        return true;
+                    } else if exception.exception_type == Exception::Deleted {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // Check Calendar
+        if let Some(cal) = data.calendar.get(service_id) {
+            if date >= cal.start_date && date <= cal.end_date {
+                let runs = match date.weekday() {
+                    chrono::Weekday::Mon => cal.monday,
+                    chrono::Weekday::Tue => cal.tuesday,
+                    chrono::Weekday::Wed => cal.wednesday,
+                    chrono::Weekday::Thu => cal.thursday,
+                    chrono::Weekday::Fri => cal.friday,
+                    chrono::Weekday::Sat => cal.saturday,
+                    chrono::Weekday::Sun => cal.sunday,
+                };
+
+                if runs {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     pub fn has_data(&self) -> bool {
-        !self.tiploc_map.read().unwrap().is_empty()
+        !self.data.read().unwrap().tiploc_map.is_empty()
     }
 
     fn download_and_load(url: &str) -> Result<Gtfs> {
@@ -81,18 +156,49 @@ impl GTFSManager {
         Ok(gtfs)
     }
 
-    fn build_tiploc_map(gtfs: &Gtfs) -> HashMap<String, String> {
-        let mut map = HashMap::new();
-        for (id, stop) in &gtfs.stops {
-            // Priority 1: stop_code is a TIPLOC?
-            map.insert(id.clone(), id.clone());
+    fn build_indices(gtfs: &Gtfs) -> GtfsData {
+        let mut data = GtfsData::default();
 
+        // TIPLOC Map
+        for (id, stop) in &gtfs.stops {
+            data.tiploc_map.insert(id.clone(), id.clone());
             if let Some(code) = &stop.code {
-                map.insert(code.clone(), id.clone());
+                data.tiploc_map.insert(code.clone(), id.clone());
             }
         }
-        println!("Built TIPLOC map with {} entries", map.len());
-        map
+
+        // UID Index & Trips
+        for (trip_id, trip) in &gtfs.trips {
+            data.trips.insert(trip_id.clone(), trip.clone());
+
+            // Assume Trip ID format matches UID_...
+            if let Some(uid_part) = trip_id.split('_').next() {
+                data.uid_index
+                    .entry(uid_part.to_string())
+                    .or_default()
+                    .push(trip_id.clone());
+            }
+        }
+
+        // Calendar
+        for (service_id, cal) in &gtfs.calendar {
+            data.calendar.insert(service_id.clone(), cal.clone());
+        }
+
+        // Calendar Dates
+        for (service_id, dates) in &gtfs.calendar_dates {
+            data.calendar_dates
+                .insert(service_id.clone(), dates.clone());
+        }
+
+        println!(
+            "GTFS Indices built: {} stops, {} trips, {} services",
+            data.tiploc_map.len(),
+            data.trips.len(),
+            data.calendar.len()
+        );
+
+        data
     }
 }
 

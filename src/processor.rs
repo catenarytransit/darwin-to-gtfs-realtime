@@ -1,7 +1,7 @@
 use crate::darwin_types::{Loading, Location, Pport, StationMessage, TrainOrder, TrainStatus};
 use crate::state::AppState;
 use anyhow::Result;
-use chrono::{NaiveDate, Timelike, Utc};
+use chrono::{NaiveDate, Utc};
 
 use gtfs_realtime::{
     FeedEntity, TripUpdate,
@@ -30,9 +30,18 @@ pub fn process_pmap(pport: Pport, state: &AppState) {
 }
 
 fn update_trip(ts: &TrainStatus, state: &AppState) {
-    // 1. Construct Trip ID: {uid}_{ssd (YYYYMMDD)}
+    // 1. Construct Trip ID: Try lookup, fallback to {uid}_{ssd}
     let clean_date = ts.ssd.replace("-", "");
-    let trip_id = format!("{}_{}", ts.uid, clean_date); // e.g., C00140_250519
+    let date_parsed =
+        NaiveDate::parse_from_str(&ts.ssd, "%Y-%m-%d").unwrap_or_else(|_| Utc::now().date_naive());
+
+    let trip_id = if let Some(found_id) = state.gtfs.find_trip_id(&ts.uid, date_parsed) {
+        // println!("Match found: {} -> {}", ts.uid, found_id);
+        found_id
+    } else {
+        println!("No static match for UID: {} on {}", ts.uid, ts.ssd);
+        format!("{}_{}", ts.uid, clean_date)
+    };
 
     // Update RID mapping
     state.rid_to_trip_id.insert(ts.rid.clone(), trip_id.clone());
