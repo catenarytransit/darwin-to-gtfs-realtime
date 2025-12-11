@@ -40,7 +40,7 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
         found_id
     } else {
         println!("No static match for UID: {} on {}", ts.uid, ts.ssd);
-        format!("{}_{}", ts.uid, clean_date)
+        return;
     };
 
     // Update RID mapping
