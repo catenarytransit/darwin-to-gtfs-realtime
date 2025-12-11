@@ -1,0 +1,25 @@
+[package]
+name = "darwin-to-gtfs-realtime"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.28", features = ["full"] }
+warp = "0.3" # Fast async HTTP server
+
+gtfs-realtime = "0.2"
+prost = "0.14" # Protocol Buffers
+
+quick-xml = { version = "0.27", features = ["serialize"] } # Fast XML parsing
+serde = { version = "1.0", features = ["derive"] }
+flate2 = "1.0" # Gzip decompression
+chrono = "0.4"
+dashmap = "6.1" # Concurrent HashMap for state
+anyhow = "1.0"
+base64 = "0.21"
+gtfs-structures = "0.46.1"
+reqwest = { version = "0.12", features = ["blocking"] }
+tempfile = "3.8"
+serde_json = "1.0"
+regex = "1.10"
+zip = "6.0"
