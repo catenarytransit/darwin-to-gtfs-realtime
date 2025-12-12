@@ -12,6 +12,7 @@ pub struct GtfsData {
     pub trips: HashMap<String, Trip>,
     pub calendar: HashMap<String, Calendar>,
     pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
+    pub trip_start_times: HashMap<String, u32>,
 }
 
 impl Default for GtfsData {
@@ -22,6 +23,7 @@ impl Default for GtfsData {
             trips: HashMap::new(),
             calendar: HashMap::new(),
             calendar_dates: HashMap::new(),
+            trip_start_times: HashMap::new(),
         }
     }
 }
@@ -110,6 +112,15 @@ impl GTFSManager {
         None
     }
 
+    pub fn get_trip_start_time(&self, trip_id: &str) -> Option<u32> {
+        self.data
+            .read()
+            .unwrap()
+            .trip_start_times
+            .get(trip_id)
+            .cloned()
+    }
+
     fn service_runs_on_date(&self, data: &GtfsData, service_id: &str, date: NaiveDate) -> bool {
         // Check CalendarDates (Exceptions) first
         if let Some(exceptions) = data.calendar_dates.get(service_id) {
@@ -189,6 +200,26 @@ impl GTFSManager {
         for (service_id, dates) in &gtfs.calendar_dates {
             data.calendar_dates
                 .insert(service_id.clone(), dates.clone());
+        }
+
+        // Trip Start Times
+        for (trip_id, trip) in &gtfs.trips {
+            // Trip Start Times
+            for (trip_id, trip) in &gtfs.trips {
+                // trip.stop_times is a Vec<StopTime>
+                for st in &trip.stop_times {
+                    if let Some(time) = st.departure_time {
+                        data.trip_start_times
+                            .entry(trip_id.clone())
+                            .and_modify(|t| {
+                                if time < *t {
+                                    *t = time;
+                                }
+                            })
+                            .or_insert(time);
+                    }
+                }
+            }
         }
 
         println!(

@@ -1,7 +1,8 @@
 use crate::darwin_types::{Loading, Location, Pport, StationMessage, TrainOrder, TrainStatus};
 use crate::state::AppState;
 use anyhow::Result;
-use chrono::{NaiveDate, Utc};
+use chrono::{Duration, NaiveDate, TimeZone, Utc};
+use chrono_tz::Europe::London;
 
 use gtfs_realtime::{
     FeedEntity, TripUpdate,
@@ -31,7 +32,6 @@ pub fn process_pmap(pport: Pport, state: &AppState) {
 
 fn update_trip(ts: &TrainStatus, state: &AppState) {
     // 1. Construct Trip ID: Try lookup, fallback to {uid}_{ssd}
-    let clean_date = ts.ssd.replace("-", "");
     let date_parsed =
         NaiveDate::parse_from_str(&ts.ssd, "%Y-%m-%d").unwrap_or_else(|_| Utc::now().date_naive());
 
@@ -60,7 +60,27 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
             fe.id = trip_id.clone();
             let mut tu = TripUpdate::default();
             tu.trip.trip_id = Some(trip_id.clone());
-            tu.trip.start_date = Some(clean_date.clone());
+
+            // Correct Start Date Calculation
+            // 1. Get trip start time from static GTFS (seconds from midnight)
+            let start_secs = state.gtfs.get_trip_start_time(&trip_id).unwrap_or(0);
+
+            // 2. Construct naive datetime (Local/London time) based on SSD + StartTime
+            // SSD is the "Schedule Date", adding start_secs gives the actual Start Time in UK Local.
+            let initial_dt = date_parsed.and_hms_opt(0, 0, 0).unwrap_or_default()
+                + Duration::seconds(start_secs as i64);
+
+            // 3. Convert/Ensure it's London Time (mostly for correctness of date boundary)
+            // Using latest() to handle ambiguity; fallback to naive date if invalid (gap).
+            let correct_date_str = London
+                .from_local_datetime(&initial_dt)
+                .latest()
+                .map(|dt| dt.date_naive())
+                .unwrap_or_else(|| initial_dt.date())
+                .format("%%Y%%m%%d")
+                .to_string();
+
+            tu.trip.start_date = Some(correct_date_str);
             // route_id? We don't have it easily. gtfs-rt spec says optional if trip_id is unique.
             fe.trip_update = Some(tu);
             fe
