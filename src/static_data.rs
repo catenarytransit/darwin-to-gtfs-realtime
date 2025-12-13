@@ -195,37 +195,38 @@ impl GTFSManager {
                     .push(trip_id.clone());
             }
         }
+        log_info("Built UID index");
 
         // Calendar
         for (service_id, cal) in &gtfs.calendar {
             data.calendar.insert(service_id.clone(), cal.clone());
         }
+        log_info("Built Calendar");
 
         // Calendar Dates
         for (service_id, dates) in &gtfs.calendar_dates {
             data.calendar_dates
                 .insert(service_id.clone(), dates.clone());
         }
+        log_info("Built Calendar Dates");
 
         // Trip Start Times
         for (trip_id, trip) in &gtfs.trips {
-            // Trip Start Times
-            for (trip_id, trip) in &gtfs.trips {
-                // trip.stop_times is a Vec<StopTime>
-                for st in &trip.stop_times {
-                    if let Some(time) = st.departure_time {
-                        data.trip_start_times
-                            .entry(trip_id.clone())
-                            .and_modify(|t| {
-                                if time < *t {
-                                    *t = time;
-                                }
-                            })
-                            .or_insert(time);
-                    }
+            // trip.stop_times is a Vec<StopTime>
+            for st in &trip.stop_times {
+                if let Some(time) = st.departure_time {
+                    data.trip_start_times
+                        .entry(trip_id.clone())
+                        .and_modify(|t| {
+                            if time < *t {
+                                *t = time;
+                            }
+                        })
+                        .or_insert(time);
                 }
             }
         }
+        log_info("Built Trip Start Times");
 
         println!(
             "GTFS Indices built: {} stops, {} trips, {} services",
