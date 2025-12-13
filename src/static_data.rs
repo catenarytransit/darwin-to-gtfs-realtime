@@ -72,6 +72,8 @@ impl GTFSManager {
     pub fn load_initial(&self) -> Result<()> {
         log_info("Performing initial GTFS load...");
         let new_gtfs = Self::download_and_load(&self.url)?;
+
+        println!("Building indices...");
         let new_data = Self::build_indices(&new_gtfs);
 
         {
@@ -164,6 +166,7 @@ impl GTFSManager {
     fn download_and_load(url: &str) -> Result<Gtfs> {
         // 1. Download to temp file
         let gtfs = Gtfs::new(url).map_err(|e| anyhow::anyhow!("Gtfs error: {:?}", e))?;
+        println!("Downloaded GTFS");
         Ok(gtfs)
     }
 

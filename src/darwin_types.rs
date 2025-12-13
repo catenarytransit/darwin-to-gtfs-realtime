@@ -28,12 +28,30 @@ pub struct UpdateRecord {
 
     #[serde(rename = "association", default)]
     pub association: Vec<Association>,
+    #[serde(rename = "formation", default)]
+    pub formation: Vec<Formation>,
     #[serde(rename = "trainAlert", default)]
     pub train_alert: Vec<TrainAlert>,
     #[serde(rename = "trackingId", default)]
     pub tracking_id: Vec<TrackingId>,
     #[serde(rename = "alarm", default)]
     pub rtti_alarm: Vec<RTTIAlarm>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Formation {
+    #[serde(rename = "@rid")]
+    pub rid: String,
+    #[serde(rename = "coach", default)] // Assuming 'coach' is the element name
+    pub coaches: Vec<Coach>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Coach {
+    #[serde(rename = "@number")]
+    pub number: String,
+    #[serde(rename = "@coachClass")]
+    pub class: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

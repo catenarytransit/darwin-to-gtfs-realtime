@@ -25,9 +25,56 @@ pub fn process_pmap(pport: Pport, state: &AppState) {
         for load in ur.loading.iter().chain(ur.loading_alias.iter()) {
             process_loading(load, state);
         }
+        for formation in ur.formation {
+            process_formation(&formation, state);
+        }
     }
     // We currently ignore schedule_record (sR) as we rely on static GTFS for basic schedule
     // and uR for updates.
+}
+
+fn process_formation(formation: &crate::darwin_types::Formation, state: &AppState) {
+    if let Some(trip_id) = state.rid_to_trip_id.get(&formation.rid) {
+        let label = formation
+            .coaches
+            .iter()
+            .map(|c| c.number.clone())
+            .collect::<Vec<_>>()
+            .join("-");
+
+        println!(
+            "Processed Formation for RID: {}, Label: {}",
+            formation.rid, label
+        );
+
+        // Update TripUpdate
+        if let Some(mut entity) = state.trip_updates.get_mut(trip_id.value()) {
+            if let Some(tu) = entity.trip_update.as_mut() {
+                let mut vehicle = tu.vehicle.clone().unwrap_or_default();
+                vehicle.label = Some(label.clone());
+                tu.vehicle = Some(vehicle);
+            }
+        }
+
+        // Update VehiclePosition
+        let vp_key = format!("{}_VP", trip_id.as_str());
+        let mut entity = state.trip_updates.entry(vp_key.clone()).or_insert_with(|| {
+            let mut fe = FeedEntity::default();
+            fe.id = vp_key.clone();
+            let mut vp = VehiclePosition::default();
+            let mut td = gtfs_realtime::TripDescriptor::default();
+            td.trip_id = Some(trip_id.clone());
+            vp.trip = Some(td);
+            fe.vehicle = Some(vp);
+            fe
+        });
+
+        if let Some(vp) = entity.vehicle.as_mut() {
+            let mut descriptor = vp.vehicle.clone().unwrap_or_default();
+            descriptor.label = Some(label);
+            vp.vehicle = Some(descriptor);
+        }
+    }
 }
 
 fn update_trip(ts: &TrainStatus, state: &AppState) {
