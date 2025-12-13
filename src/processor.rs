@@ -5,7 +5,7 @@ use chrono::{Duration, NaiveDate, TimeZone, Utc};
 use chrono_tz::Europe::London;
 
 use gtfs_realtime::{
-    FeedEntity, TripUpdate,
+    FeedEntity, TripUpdate, VehiclePosition,
     trip_update::{StopTimeEvent, StopTimeUpdate},
 };
 
@@ -77,7 +77,7 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
                 .latest()
                 .map(|dt| dt.date_naive())
                 .unwrap_or_else(|| initial_dt.date())
-                .format("%%Y%%m%%d")
+                .format("%Y%m%d")
                 .to_string();
 
             tu.trip.start_date = Some(correct_date_str);
@@ -143,31 +143,72 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
 }
 
 fn update_trip_from_order(to: &TrainOrder, state: &AppState) {
-    if let Some(stop_id) = state.gtfs.get_stop_id(&to.tiploc) {
-        if let Some(platform) = &to.platform {
-            // New Hierarchy: set -> first/second/third -> item -> rid|trainID
-            if let Some(set) = &to.set {
-                let items = vec![&set.first, &set.second, &set.third];
+    if let Some(set) = &to.set {
+        let items = vec![&set.first, &set.second, &set.third];
 
-                for item_opt in items {
-                    if let Some(item) = item_opt {
-                        // Check for RID
-                        if let Some(rid_data) = &item.rid {
-                            if let Some(trip_id) = state.rid_to_trip_id.get(&rid_data.value) {
-                                println!(
-                                    "Processed TrainOrder for RID: {} at {}",
-                                    rid_data.value, to.tiploc
-                                );
-                                // Update Platform for this Trip at this Stop
-                                // Note: TrainOrder doesn't explicitly have 'platsup'.
-                                // Assuming visible if provided in TrainOrder? (Or maybe inherit?)
-                                // For now, proceed.
-                                let mut platforms_entry =
-                                    state.platforms.entry(trip_id.clone()).or_default();
-                                platforms_entry.insert(stop_id.clone(), platform.clone());
+        for (idx, item_opt) in items.iter().enumerate() {
+            if let Some(item) = item_opt {
+                if let Some(rid_data) = &item.rid {
+                    if let Some(trip_id) = state.rid_to_trip_id.get(&rid_data.value) {
+                        // 1. Update Platform (existing logic)
+                        if let Some(stop_id) = state.gtfs.get_stop_id(&to.tiploc) {
+                            if let Some(platform) = &to.platform {
+                                state
+                                    .platforms
+                                    .entry(trip_id.clone())
+                                    .or_default()
+                                    .insert(stop_id.clone(), platform.clone());
                             }
                         }
-                        // Ignore trainID for now (no mapping to RID/TripID available easily without more state)
+
+                        // 2. Update VehiclePosition for Consist
+                        let vp_key = format!("{}_VP", trip_id.as_str());
+                        let mut entity =
+                            state.trip_updates.entry(vp_key.clone()).or_insert_with(|| {
+                                let mut fe = FeedEntity::default();
+                                fe.id = vp_key.clone();
+                                let mut vp = VehiclePosition::default();
+
+                                // Library TripUpdate has TripDescriptor direct, but VehiclePosition?
+                                // VehiclePosition typically has optional TripDescriptor.
+                                // Let's check typical usage. Usually `vp.trip = Some(...)`
+                                // I'll assume standard usage.
+                                let mut td = gtfs_realtime::TripDescriptor::default();
+                                td.trip_id = Some(trip_id.clone());
+                                vp.trip = Some(td);
+
+                                fe.vehicle = Some(vp);
+                                fe
+                            });
+
+                        let vp = entity.vehicle.as_mut().unwrap();
+
+                        if let Some(stop_id) = state.gtfs.get_stop_id(&to.tiploc) {
+                            vp.stop_id = Some(stop_id);
+                        }
+
+                        // Populate CarriageDetails
+                        // Reuse existing entry if sequence matches, else create new.
+                        let seq = (idx + 1) as u32;
+                        let mut cd = gtfs_realtime::vehicle_position::CarriageDetails::default();
+                        cd.id = Some(rid_data.value.clone());
+                        cd.label = item.train_id.clone();
+                        cd.carriage_sequence = Some(seq);
+
+                        if let Some(existing) = vp
+                            .multi_carriage_details
+                            .iter_mut()
+                            .find(|c| c.carriage_sequence == Some(seq))
+                        {
+                            *existing = cd;
+                        } else {
+                            vp.multi_carriage_details.push(cd);
+                        }
+                        // Keep sorted
+                        vp.multi_carriage_details
+                            .sort_by_key(|c| c.carriage_sequence.unwrap_or(0));
+
+                        println!("Updated VP Consist for Trip {}", trip_id.as_str());
                     }
                 }
             }
