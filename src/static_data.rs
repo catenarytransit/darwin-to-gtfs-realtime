@@ -181,6 +181,8 @@ impl GTFSManager {
             }
         }
 
+        log_info("Built TIPLOC map");
+
         // UID Index & Trips
         for (trip_id, trip) in &gtfs.trips {
             data.trips.insert(trip_id.clone(), trip.clone());
