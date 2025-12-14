@@ -97,7 +97,22 @@ async fn main() -> Result<()> {
             warp::reply::json(&data)
         });
 
-    let routes = gtfs_rt_route.or(platforms_route).boxed();
+    // GET /platforms-v2
+    let platforms_v2_route = warp::path("platforms-v2")
+        .and(warp::get())
+        .and(state_filter.clone())
+        .map(|state: Arc<AppState>| {
+            let mut data = std::collections::HashMap::new();
+            for r in state.platforms_v2.iter() {
+                data.insert(r.key().clone(), r.value().clone());
+            }
+            warp::reply::json(&data)
+        });
+
+    let routes = gtfs_rt_route
+        .or(platforms_route)
+        .or(platforms_v2_route)
+        .boxed();
 
     let server_port: u16 = std::env::var("PORT")
         .unwrap_or_else(|_| "3000".to_string())

@@ -123,6 +123,24 @@ impl GTFSManager {
             .cloned()
     }
 
+    pub fn get_trip_stops(&self, trip_id: &str) -> Option<Vec<(String, u32)>> {
+        let data = self.data.read().unwrap();
+        if let Some(trip) = data.trips.get(trip_id) {
+            // gtfs-structures stop_times elements have a 'stop' field which is an Arc<Stop> or struct with id
+            // We assume st.stop.id based on common crates, or st.stop_id if flattened.
+            // Let's check if we can inspect the crate source or just try.
+            // Usually it is st.stop.id
+            Some(
+                trip.stop_times
+                    .iter()
+                    .map(|st| (st.stop.id.clone(), st.stop_sequence))
+                    .collect(),
+            )
+        } else {
+            None
+        }
+    }
+
     fn service_runs_on_date(&self, data: &GtfsData, service_id: &str, date: NaiveDate) -> bool {
         // Check CalendarDates (Exceptions) first
         if let Some(exceptions) = data.calendar_dates.get(service_id) {

@@ -8,6 +8,13 @@ use std::collections::HashMap;
 // Platform Map: StopID -> Platform Number
 pub type PlatformMap = HashMap<String, String>;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlatformInfo {
+    pub stop_id: String,
+    pub sequence: u32,
+    pub platform: String,
+}
+
 pub struct AppState {
     // Map TripID -> GTFS-RT Entity (TripUpdate)
     pub trip_updates: DashMap<String, FeedEntity>,
@@ -15,6 +22,9 @@ pub struct AppState {
     // Map TripID -> (StopID -> Platform)
     // We need this for the /platforms endpoint
     pub platforms: DashMap<String, PlatformMap>,
+
+    // Map TripID -> List of Platform Info (V2 Schema)
+    pub platforms_v2: DashMap<String, Vec<PlatformInfo>>,
 
     // Map Station CRS -> List of Messages
     // For simplicity, we might just store all messages, or map by ID.
@@ -34,6 +44,7 @@ impl AppState {
         Self {
             trip_updates: DashMap::new(),
             platforms: DashMap::new(),
+            platforms_v2: DashMap::new(),
             station_messages: DashMap::new(),
             rid_to_trip_id: DashMap::new(),
             gtfs: GTFSManager::new(gtfs_url),

@@ -98,6 +98,12 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
         ts.rid, trip_id
     );
 
+    // Fetch static stop sequence for loop handling
+    // We assume the static stops are sorted by sequence, or we iterate in order.
+    // Darwin locations usually come in order.
+    let trip_stops = state.gtfs.get_trip_stops(&trip_id).unwrap_or_default();
+    let mut current_static_idx = 0;
+
     // 2. Prepare GTFS-RT Entity
     let mut entity = state
         .trip_updates
@@ -137,6 +143,8 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
 
     // 3. Process Locations
     let mut platform_updates = HashMap::new();
+    // Map Sequence -> (StopID, Platform)
+    let mut platform_v2_updates: HashMap<u32, (String, String)> = HashMap::new();
 
     for loc in &ts.locations {
         // Check if tiploc exists
@@ -145,6 +153,18 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
             let stop_id_opt = state.gtfs.get_stop_id(tiploc);
 
             if let Some(stop_id) = stop_id_opt {
+                // Find matching sequence (Forward greedy match)
+                let mut found_seq = None;
+                if !trip_stops.is_empty() {
+                    for i in current_static_idx..trip_stops.len() {
+                        if trip_stops[i].0 == stop_id {
+                            found_seq = Some(trip_stops[i].1);
+                            current_static_idx = i + 1; // Advance
+                            break;
+                        }
+                    }
+                }
+
                 // Platform Logic
                 if let Some(plat) = &loc.platform {
                     // Suppression Check:
@@ -156,36 +176,81 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
                     if !is_suppressed {
                         // Only update if not suppressed
                         if let Some(num) = &plat.number {
+                            // V1 (Legacy - Broken for loops)
                             platform_updates.insert(stop_id.clone(), num.clone());
+
+                            // V2 (Sequence based)
+                            if let Some(seq) = found_seq {
+                                platform_v2_updates.insert(seq, (stop_id.clone(), num.clone()));
+                            }
                         }
                     }
                 }
 
                 // Delay / Time Logic
                 if has_time_data(loc) {
-                    let stu = build_stop_time_update(loc, &stop_id, &ts.ssd);
+                    let stu = build_stop_time_update(loc, &stop_id, &ts.ssd, found_seq);
 
-                    // Check if exists
-                    if let Some(existing_idx) = trip_update
-                        .stop_time_update
-                        .iter()
-                        .position(|u| u.stop_id.as_deref() == Some(&stop_id))
-                    {
-                        trip_update.stop_time_update[existing_idx] = stu;
+                    // Update Logic: Prefer sequence match if available
+                    if let Some(seq) = found_seq {
+                        if let Some(idx) = trip_update
+                            .stop_time_update
+                            .iter()
+                            .position(|u| u.stop_sequence == Some(seq))
+                        {
+                            trip_update.stop_time_update[idx] = stu;
+                        } else {
+                            trip_update.stop_time_update.push(stu);
+                        }
                     } else {
-                        trip_update.stop_time_update.push(stu);
+                        // Fallback to stop_id match
+                        if let Some(existing_idx) = trip_update
+                            .stop_time_update
+                            .iter()
+                            .position(|u| u.stop_id.as_deref() == Some(&stop_id))
+                        {
+                            trip_update.stop_time_update[existing_idx] = stu;
+                        } else {
+                            trip_update.stop_time_update.push(stu);
+                        }
                     }
                 }
             }
         }
     }
 
-    // Update Platform Map
+    // Sort updates by sequence
+    trip_update
+        .stop_time_update
+        .sort_by_key(|u| u.stop_sequence.unwrap_or(0));
+
+    // Update Platform Maps
     if !platform_updates.is_empty() {
         let mut platforms_entry = state.platforms.entry(trip_id.clone()).or_default();
         for (stop_id, plat) in platform_updates {
             platforms_entry.insert(stop_id, plat);
         }
+    }
+
+    if !platform_v2_updates.is_empty() {
+        use crate::state::PlatformInfo;
+        let mut platforms_entry = state.platforms_v2.entry(trip_id.clone()).or_default();
+
+        for (seq, (stop_id, plat)) in platform_v2_updates {
+            // Check if we already have an entry for this sequence
+            if let Some(existing) = platforms_entry.iter_mut().find(|p| p.sequence == seq) {
+                existing.platform = plat;
+                existing.stop_id = stop_id;
+            } else {
+                platforms_entry.push(PlatformInfo {
+                    stop_id,
+                    sequence: seq,
+                    platform: plat,
+                });
+            }
+        }
+        // Keep sorted by sequence
+        platforms_entry.sort_by_key(|p| p.sequence);
     }
 }
 
@@ -291,9 +356,15 @@ fn check_forecast(f: &Option<crate::darwin_types::Forecast>) -> bool {
     }
 }
 
-fn build_stop_time_update(loc: &Location, stop_id: &str, ssd: &str) -> StopTimeUpdate {
+fn build_stop_time_update(
+    loc: &Location,
+    stop_id: &str,
+    ssd: &str,
+    seq: Option<u32>,
+) -> StopTimeUpdate {
     let mut stu = StopTimeUpdate::default();
     stu.stop_id = Some(stop_id.to_string());
+    stu.stop_sequence = seq;
 
     if let Some(arr) = &loc.arr {
         stu.arrival = parse_time(arr, ssd);
