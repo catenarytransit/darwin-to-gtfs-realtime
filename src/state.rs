@@ -3,10 +3,10 @@ use dashmap::DashMap;
 use gtfs_realtime::FeedEntity;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+// use std::collections::HashMap; REMOVED
 
-// Platform Map: StopID -> Platform Number
-pub type PlatformMap = HashMap<String, String>;
+// Platform Map: StopID -> Platform Number REMOVED
+// pub type PlatformMap = HashMap<String, String>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlatformInfo {
@@ -19,9 +19,7 @@ pub struct AppState {
     // Map TripID -> GTFS-RT Entity (TripUpdate)
     pub trip_updates: DashMap<String, FeedEntity>,
 
-    // Map TripID -> (StopID -> Platform)
-    // We need this for the /platforms endpoint
-    pub platforms: DashMap<String, PlatformMap>,
+    // platforms field REMOVED
 
     // Map TripID -> List of Platform Info (V2 Schema)
     pub platforms_v2: DashMap<String, Vec<PlatformInfo>>,
@@ -43,7 +41,7 @@ impl AppState {
     pub fn new(gtfs_url: String) -> Self {
         Self {
             trip_updates: DashMap::new(),
-            platforms: DashMap::new(),
+            // platforms: DashMap::new(), REMOVED
             platforms_v2: DashMap::new(),
             station_messages: DashMap::new(),
             rid_to_trip_id: DashMap::new(),

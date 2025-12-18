@@ -1,6 +1,7 @@
 use crate::darwin_types::{Loading, Location, Pport, StationMessage, TrainOrder, TrainStatus};
 use crate::state::AppState;
-use anyhow::Result;
+// use anyhow::Result;
+
 use chrono::{Duration, NaiveDate, TimeZone, Utc};
 use chrono_tz::Europe::London;
 
@@ -225,13 +226,6 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
         .sort_by_key(|u| u.stop_sequence.unwrap_or(0));
 
     // Update Platform Maps
-    if !platform_updates.is_empty() {
-        let mut platforms_entry = state.platforms.entry(trip_id.clone()).or_default();
-        for (stop_id, plat) in platform_updates {
-            platforms_entry.insert(stop_id, plat);
-        }
-    }
-
     if !platform_v2_updates.is_empty() {
         use crate::state::PlatformInfo;
         let mut platforms_entry = state.platforms_v2.entry(trip_id.clone()).or_default();
@@ -262,14 +256,14 @@ fn update_trip_from_order(to: &TrainOrder, state: &AppState) {
             if let Some(item) = item_opt {
                 if let Some(rid_data) = &item.rid {
                     if let Some(trip_id) = state.rid_to_trip_id.get(&rid_data.value) {
-                        // 1. Update Platform (existing logic)
-                        if let Some(stop_id) = state.gtfs.get_stop_id(&to.tiploc) {
-                            if let Some(platform) = &to.platform {
-                                state
-                                    .platforms
-                                    .entry(trip_id.clone())
-                                    .or_default()
-                                    .insert(stop_id.clone(), platform.clone());
+                        // 1. Update Platform (existing logic) REMOVED
+                        if let Some(_stop_id) = state.gtfs.get_stop_id(&to.tiploc) {
+                            if let Some(_platform) = &to.platform {
+                                // state
+                                //     .platforms
+                                //     .entry(trip_id.clone())
+                                //     .or_default()
+                                //     .insert(stop_id.clone(), platform.clone());
                             }
                         }
 
@@ -336,7 +330,7 @@ fn process_station_message(msg: &StationMessage, state: &AppState) {
 
 fn process_loading(load: &Loading, state: &AppState) {
     // Need Loading fields to be useful.
-    if let Some(trip_id) = state.rid_to_trip_id.get(&load.rid) {
+    if let Some(_trip_id) = state.rid_to_trip_id.get(&load.rid) {
         // TODO: Update OccupancyStatus if Loading struct has fields.
         // For now, valid placeholder.
         println!("Processed Loading for RID: {}", load.rid);

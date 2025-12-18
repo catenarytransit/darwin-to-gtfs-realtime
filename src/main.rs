@@ -85,17 +85,7 @@ async fn main() -> Result<()> {
             warp::reply::with_header(buf, "content-type", "application/x-protobuf")
         });
 
-    // GET /platforms
-    let platforms_route = warp::path("platforms")
-        .and(warp::get())
-        .and(state_filter.clone())
-        .map(|state: Arc<AppState>| {
-            let mut data = std::collections::HashMap::new();
-            for r in state.platforms.iter() {
-                data.insert(r.key().clone(), r.value().clone());
-            }
-            warp::reply::json(&data)
-        });
+    // GET /platforms REMOVED
 
     // GET /platforms-v2
     let platforms_v2_route = warp::path("platforms-v2")
@@ -110,7 +100,7 @@ async fn main() -> Result<()> {
         });
 
     let routes = gtfs_rt_route
-        .or(platforms_route)
+        // .or(platforms_route) REMOVED
         .or(platforms_v2_route)
         .boxed();
 

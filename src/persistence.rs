@@ -1,4 +1,5 @@
-use crate::state::{AppState, PlatformMap};
+use crate::state::AppState;
+
 use anyhow::Result;
 use gtfs_realtime::{FeedHeader, FeedMessage};
 
@@ -26,17 +27,15 @@ pub fn save_state(state: &AppState, dir: &str) -> Result<()> {
     let mut f = File::create(trips_path)?;
     f.write_all(&buf)?;
 
-    // 2. Save Platforms (JSON)
-    let platforms_path = format!("{}/platforms.json", dir);
-    // Collect DashMap to HashMap for serde
-    let mut platform_data: std::collections::HashMap<String, PlatformMap> =
-        std::collections::HashMap::new();
-    for r in state.platforms.iter() {
-        platform_data.insert(r.key().clone(), r.value().clone());
+    // 2. Save Platforms V2 (Bincode)
+    let platforms_v2_path = format!("{}/platforms_v2.bin", dir);
+    // Collect DashMap to HashMap for serialization
+    let mut v2_map = std::collections::HashMap::new();
+    for r in state.platforms_v2.iter() {
+        v2_map.insert(r.key().clone(), r.value().clone());
     }
-
-    let f = File::create(platforms_path)?;
-    serde_json::to_writer(f, &platform_data)?;
+    let f = File::create(platforms_v2_path)?;
+    bincode::serialize_into(f, &v2_map)?;
 
     Ok(())
 }
@@ -56,17 +55,21 @@ pub fn load_state(state: &AppState, dir: &str) -> Result<()> {
         }
     }
 
-    let platforms_path = format!("{}/platforms.json", dir);
-    if Path::new(&platforms_path).exists() {
-        let f = File::open(platforms_path)?;
-        let platform_data: std::collections::HashMap<String, PlatformMap> =
-            serde_json::from_reader(f)?;
-        for (trip_id, map) in platform_data {
-            state.platforms.insert(trip_id, map);
+    // Platform loading removed
+
+    // Load Platforms V2 (Bincode)
+    let platforms_v2_path = format!("{}/platforms_v2.bin", dir);
+    if Path::new(&platforms_v2_path).exists() {
+        let f = File::open(platforms_v2_path)?;
+        let v2_map: std::collections::HashMap<String, Vec<crate::state::PlatformInfo>> =
+            bincode::deserialize_from(f)?;
+
+        for (trip_id, info) in v2_map {
+            state.platforms_v2.insert(trip_id, info);
         }
         println!(
-            "Loaded platforms for {} trips from disk.",
-            state.platforms.len()
+            "Loaded platforms_v2 for {} trips.",
+            state.platforms_v2.len()
         );
     }
 
