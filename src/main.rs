@@ -15,6 +15,7 @@ use tokio::net::TcpStream;
 use warp::Filter;
 
 mod darwin_types;
+mod gc;
 mod persistence;
 mod processor;
 mod state;
@@ -60,7 +61,18 @@ async fn main() -> Result<()> {
         }
     });
 
-    // 5. HTTP Server
+    // 5. Garbage Collection Loop
+    let state_clone_gc = state.clone();
+    tokio::spawn(async move {
+        loop {
+            // Run every 10 minutes
+            tokio::time::sleep(Duration::from_secs(600)).await;
+            // Clean up trips older than 1 hour (3600 seconds)
+            gc::cleanup_old_trips(&state_clone_gc, Duration::from_secs(3600));
+        }
+    });
+
+    // 6. HTTP Server
     // Use .boxed() to simplify types
     let state_filter_base = state.clone();
     let state_filter = warp::any().map(move || state_filter_base.clone()).boxed();

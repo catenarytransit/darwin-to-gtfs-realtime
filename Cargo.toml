@@ -5,23 +5,23 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1.28", features = ["full"] }
-warp = "0.3" # Fast async HTTP server
+warp = "0.3"                                      # Fast async HTTP server
 
 gtfs-realtime = "0.2"
-prost = "0.14" # Protocol Buffers
+prost = "0.14"        # Protocol Buffers
 
 quick-xml = { version = "0.27", features = ["serialize"] } # Fast XML parsing
 serde = { version = "1.0", features = ["derive"] }
-flate2 = "1.0" # Gzip decompression
+flate2 = "1.0"                                             # Gzip decompression
 chrono = "0.4"
-dashmap = "6.1" # Concurrent HashMap for state
+dashmap = "6.1"                                            # Concurrent HashMap for state
 anyhow = "1.0"
-base64 = "0.21"
+base64 = "0.22"
 gtfs-structures = "0.46.1"
 reqwest = { version = "0.12", features = ["blocking"] }
-tempfile = "3.8"
+tempfile = "3.23"
 serde_json = "1.0"
-regex = "1.10"
+regex = "1.12"
 zip = "6.0"
 chrono-tz = "0.10.4"
 bincode = "1.3"
