@@ -1,4 +1,5 @@
 use crate::state::AppState;
+use compact_str::CompactString;
 
 use anyhow::Result;
 use gtfs_realtime::{FeedHeader, FeedMessage};
@@ -49,7 +50,9 @@ pub fn load_state(state: &AppState, dir: &str) -> Result<()> {
 
         if let Ok(msg) = FeedMessage::decode(&buf[..]) {
             for entity in msg.entity {
-                state.trip_updates.insert(entity.id.clone(), entity);
+                state
+                    .trip_updates
+                    .insert(CompactString::from(entity.id.clone()), entity);
             }
             println!("Loaded {} trips from disk.", state.trip_updates.len());
         }
@@ -61,7 +64,7 @@ pub fn load_state(state: &AppState, dir: &str) -> Result<()> {
     let platforms_v2_path = format!("{}/platforms_v2.bin", dir);
     if Path::new(&platforms_v2_path).exists() {
         let f = File::open(platforms_v2_path)?;
-        let v2_map: std::collections::HashMap<String, Vec<crate::state::PlatformInfo>> =
+        let v2_map: std::collections::HashMap<CompactString, Vec<crate::state::PlatformInfo>> =
             bincode::deserialize_from(f)?;
 
         for (trip_id, info) in v2_map {

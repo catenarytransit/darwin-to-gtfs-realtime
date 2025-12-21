@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::{Datelike, NaiveDate};
+use compact_str::CompactString;
 use gtfs_structures::{Calendar, CalendarDate, Exception, Gtfs, Trip};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -7,12 +8,12 @@ use std::thread;
 use std::time::Duration;
 
 pub struct GtfsData {
-    pub tiploc_map: HashMap<String, String>,
-    pub uid_index: HashMap<String, Vec<String>>, // UID -> List of TripIDs
-    pub trips: HashMap<String, Trip>,
-    pub calendar: HashMap<String, Calendar>,
-    pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
-    pub trip_start_times: HashMap<String, u32>,
+    pub tiploc_map: HashMap<CompactString, CompactString>,
+    pub uid_index: HashMap<CompactString, Vec<String>>, // UID -> List of TripIDs
+    pub trips: HashMap<CompactString, Trip>,
+    pub calendar: HashMap<CompactString, Calendar>,
+    pub calendar_dates: HashMap<CompactString, Vec<CalendarDate>>,
+    pub trip_start_times: HashMap<CompactString, u32>,
 }
 
 impl Default for GtfsData {
@@ -84,7 +85,7 @@ impl GTFSManager {
         Ok(())
     }
 
-    pub fn get_stop_id(&self, tiploc: &str) -> Option<String> {
+    pub fn get_stop_id(&self, tiploc: &str) -> Option<CompactString> {
         let data = self.data.read().unwrap();
         // Try exact match first
         if let Some(id) = data.tiploc_map.get(tiploc) {
@@ -93,20 +94,22 @@ impl GTFSManager {
         None
     }
 
-    pub fn unwrap_stop_id(&self, tiploc: &str) -> String {
-        self.get_stop_id(tiploc).unwrap_or(tiploc.to_string())
+    pub fn unwrap_stop_id(&self, tiploc: &str) -> CompactString {
+        self.get_stop_id(tiploc)
+            .unwrap_or_else(|| CompactString::from(tiploc))
     }
 
-    pub fn find_trip_id(&self, uid: &str, date: NaiveDate) -> Option<String> {
+    pub fn find_trip_id(&self, uid: &str, date: NaiveDate) -> Option<CompactString> {
         let data = self.data.read().unwrap();
 
         // 1. Look up candidates by UID
         if let Some(candidates) = data.uid_index.get(uid) {
             for trip_id in candidates {
                 // 2. Check service calendar
-                if let Some(trip) = data.trips.get(trip_id) {
+                // trip_id in uid_index is String (Vec<String>), need to handle lookup
+                if let Some(trip) = data.trips.get(trip_id.as_str()) {
                     if self.service_runs_on_date(&data, &trip.service_id, date) {
-                        return Some(trip_id.clone());
+                        return Some(CompactString::from(trip_id));
                     }
                 }
             }
@@ -123,17 +126,13 @@ impl GTFSManager {
             .cloned()
     }
 
-    pub fn get_trip_stops(&self, trip_id: &str) -> Option<Vec<(String, u32)>> {
+    pub fn get_trip_stops(&self, trip_id: &str) -> Option<Vec<(CompactString, u32)>> {
         let data = self.data.read().unwrap();
         if let Some(trip) = data.trips.get(trip_id) {
-            // gtfs-structures stop_times elements have a 'stop' field which is an Arc<Stop> or struct with id
-            // We assume st.stop.id based on common crates, or st.stop_id if flattened.
-            // Let's check if we can inspect the crate source or just try.
-            // Usually it is st.stop.id
             Some(
                 trip.stop_times
                     .iter()
-                    .map(|st| (st.stop.id.clone(), st.stop_sequence))
+                    .map(|st| (CompactString::from(st.stop.id.clone()), st.stop_sequence))
                     .collect(),
             )
         } else {
@@ -193,9 +192,11 @@ impl GTFSManager {
 
         // TIPLOC Map
         for (id, stop) in &gtfs.stops {
-            data.tiploc_map.insert(id.clone(), id.clone());
+            data.tiploc_map
+                .insert(CompactString::from(id), CompactString::from(id));
             if let Some(code) = &stop.code {
-                data.tiploc_map.insert(code.clone(), id.clone());
+                data.tiploc_map
+                    .insert(CompactString::from(code), CompactString::from(id));
             }
         }
 
@@ -203,12 +204,13 @@ impl GTFSManager {
 
         // UID Index & Trips
         for (trip_id, trip) in &gtfs.trips {
-            data.trips.insert(trip_id.clone(), trip.clone());
+            data.trips
+                .insert(CompactString::from(trip_id), trip.clone());
 
             // Assume Trip ID format matches UID_...
             if let Some(uid_part) = trip_id.split('_').next() {
                 data.uid_index
-                    .entry(uid_part.to_string())
+                    .entry(CompactString::from(uid_part))
                     .or_default()
                     .push(trip_id.clone());
             }
@@ -217,14 +219,15 @@ impl GTFSManager {
 
         // Calendar
         for (service_id, cal) in &gtfs.calendar {
-            data.calendar.insert(service_id.clone(), cal.clone());
+            data.calendar
+                .insert(CompactString::from(service_id), cal.clone());
         }
         log_info("Built Calendar");
 
         // Calendar Dates
         for (service_id, dates) in &gtfs.calendar_dates {
             data.calendar_dates
-                .insert(service_id.clone(), dates.clone());
+                .insert(CompactString::from(service_id), dates.clone());
         }
         log_info("Built Calendar Dates");
 
@@ -234,7 +237,7 @@ impl GTFSManager {
             for st in &trip.stop_times {
                 if let Some(time) = st.departure_time {
                     data.trip_start_times
-                        .entry(trip_id.clone())
+                        .entry(CompactString::from(trip_id))
                         .and_modify(|t| {
                             if time < *t {
                                 *t = time;

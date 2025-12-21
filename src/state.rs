@@ -1,4 +1,5 @@
 use crate::static_data::GTFSManager;
+use compact_str::CompactString;
 use dashmap::DashMap;
 use gtfs_realtime::FeedEntity;
 
@@ -10,29 +11,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlatformInfo {
-    pub stop_id: String,
+    pub stop_id: CompactString,
     pub sequence: u32,
-    pub platform: String,
+    pub platform: CompactString,
 }
 
 pub struct AppState {
     // Map TripID -> GTFS-RT Entity (TripUpdate)
-    pub trip_updates: DashMap<String, FeedEntity>,
+    pub trip_updates: DashMap<CompactString, FeedEntity>,
 
     // platforms field REMOVED
 
     // Map TripID -> List of Platform Info (V2 Schema)
-    pub platforms_v2: DashMap<String, Vec<PlatformInfo>>,
+    pub platforms_v2: DashMap<CompactString, Vec<PlatformInfo>>,
 
     // Map Station CRS -> List of Messages
     // For simplicity, we might just store all messages, or map by ID.
     // Let's map by Message ID for now to avoid duplications, or by Station CRS.
     // User requirement: "Store".
     // Let's store by ID.
-    pub station_messages: DashMap<String, String>, // ID -> Msg Content
+    pub station_messages: DashMap<CompactString, String>, // ID -> Msg Content
 
     // Map RID -> TripID (for TrainOrder and Loading lookups)
-    pub rid_to_trip_id: DashMap<String, String>,
+    pub rid_to_trip_id: DashMap<CompactString, CompactString>,
 
     pub gtfs: GTFSManager,
 }

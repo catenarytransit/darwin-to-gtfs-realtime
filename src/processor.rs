@@ -1,5 +1,6 @@
 use crate::darwin_types::{Loading, Location, Pport, StationMessage, TrainOrder, TrainStatus};
 use crate::state::AppState;
+use compact_str::CompactString;
 // use anyhow::Result;
 
 use chrono::{Duration, NaiveDate, TimeZone, Utc};
@@ -58,13 +59,13 @@ fn process_formation(formation: &crate::darwin_types::Formation, state: &AppStat
         }
 
         // Update VehiclePosition
-        let vp_key = format!("{}_VP", trip_id.as_str());
+        let vp_key = CompactString::from(format!("{}_VP", trip_id.as_str()));
         let mut entity = state.trip_updates.entry(vp_key.clone()).or_insert_with(|| {
             let mut fe = FeedEntity::default();
-            fe.id = vp_key.clone();
+            fe.id = vp_key.to_string();
             let mut vp = VehiclePosition::default();
             let mut td = gtfs_realtime::TripDescriptor::default();
-            td.trip_id = Some(trip_id.clone());
+            td.trip_id = Some(trip_id.to_string());
             vp.trip = Some(td);
             fe.vehicle = Some(vp);
             fe
@@ -111,9 +112,9 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
         .entry(trip_id.clone())
         .or_insert_with(|| {
             let mut fe = FeedEntity::default();
-            fe.id = trip_id.clone();
+            fe.id = trip_id.to_string();
             let mut tu = TripUpdate::default();
-            tu.trip.trip_id = Some(trip_id.clone());
+            tu.trip.trip_id = Some(trip_id.to_string());
 
             // Correct Start Date Calculation
             // 1. Get trip start time from static GTFS (seconds from midnight)
@@ -145,7 +146,7 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
     // 3. Process Locations
     let mut platform_updates = HashMap::new();
     // Map Sequence -> (StopID, Platform)
-    let mut platform_v2_updates: HashMap<u32, (String, String)> = HashMap::new();
+    let mut platform_v2_updates: HashMap<u32, (CompactString, CompactString)> = HashMap::new();
 
     for loc in &ts.locations {
         // Check if tiploc exists
@@ -208,7 +209,7 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
                         if let Some(existing_idx) = trip_update
                             .stop_time_update
                             .iter()
-                            .position(|u| u.stop_id.as_deref() == Some(&stop_id))
+                            .position(|u| u.stop_id.as_deref() == Some(stop_id.as_str()))
                         {
                             trip_update.stop_time_update[existing_idx] = stu;
                         } else {
@@ -268,11 +269,11 @@ fn update_trip_from_order(to: &TrainOrder, state: &AppState) {
                         }
 
                         // 2. Update VehiclePosition for Consist
-                        let vp_key = format!("{}_VP", trip_id.as_str());
+                        let vp_key = CompactString::from(format!("{}_VP", trip_id.as_str()));
                         let mut entity =
                             state.trip_updates.entry(vp_key.clone()).or_insert_with(|| {
                                 let mut fe = FeedEntity::default();
-                                fe.id = vp_key.clone();
+                                fe.id = vp_key.to_string();
                                 let mut vp = VehiclePosition::default();
 
                                 // Library TripUpdate has TripDescriptor direct, but VehiclePosition?
@@ -280,7 +281,7 @@ fn update_trip_from_order(to: &TrainOrder, state: &AppState) {
                                 // Let's check typical usage. Usually `vp.trip = Some(...)`
                                 // I'll assume standard usage.
                                 let mut td = gtfs_realtime::TripDescriptor::default();
-                                td.trip_id = Some(trip_id.clone());
+                                td.trip_id = Some(trip_id.to_string());
                                 vp.trip = Some(td);
 
                                 fe.vehicle = Some(vp);
@@ -290,15 +291,15 @@ fn update_trip_from_order(to: &TrainOrder, state: &AppState) {
                         let vp = entity.vehicle.as_mut().unwrap();
 
                         if let Some(stop_id) = state.gtfs.get_stop_id(&to.tiploc) {
-                            vp.stop_id = Some(stop_id);
+                            vp.stop_id = Some(stop_id.to_string());
                         }
 
                         // Populate CarriageDetails
                         // Reuse existing entry if sequence matches, else create new.
                         let seq = (idx + 1) as u32;
                         let mut cd = gtfs_realtime::vehicle_position::CarriageDetails::default();
-                        cd.id = Some(rid_data.value.clone());
-                        cd.label = item.train_id.clone();
+                        cd.id = Some(rid_data.value.to_string());
+                        cd.label = item.train_id.clone().map(|s| s.into_string());
                         cd.carriage_sequence = Some(seq);
 
                         if let Some(existing) = vp

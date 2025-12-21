@@ -1,3 +1,4 @@
+use compact_str::CompactString;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -12,7 +13,7 @@ pub struct Pport {
 #[derive(Debug, Deserialize)]
 pub struct UpdateRecord {
     #[serde(rename = "@updateOrigin")]
-    pub update_origin: Option<String>,
+    pub update_origin: Option<CompactString>,
     #[serde(rename = "TS", default)]
     pub train_status: Vec<TrainStatus>,
     #[serde(rename = "TO", default)]
@@ -41,7 +42,7 @@ pub struct UpdateRecord {
 #[derive(Debug, Deserialize)]
 pub struct Formation {
     #[serde(rename = "@rid")]
-    pub rid: String,
+    pub rid: CompactString,
     #[serde(rename = "coach", default)] // Assuming 'coach' is the element name
     pub coaches: Vec<Coach>,
 }
@@ -49,9 +50,9 @@ pub struct Formation {
 #[derive(Debug, Deserialize)]
 pub struct Coach {
     #[serde(rename = "@number")]
-    pub number: String,
+    pub number: CompactString,
     #[serde(rename = "@coachClass")]
-    pub class: Option<String>,
+    pub class: Option<CompactString>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,21 +64,21 @@ pub struct ScheduleRecord {
 #[derive(Debug, Deserialize)]
 pub struct Schedule {
     #[serde(rename = "@rid")]
-    pub rid: String,
+    pub rid: CompactString,
     #[serde(rename = "@uid")]
-    pub uid: String,
+    pub uid: CompactString,
     #[serde(rename = "@ssd")]
-    pub ssd: String,
+    pub ssd: CompactString,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TrainStatus {
     #[serde(rename = "@rid")]
-    pub rid: String,
+    pub rid: CompactString,
     #[serde(rename = "@uid")]
-    pub uid: String,
+    pub uid: CompactString,
     #[serde(rename = "@ssd")]
-    pub ssd: String,
+    pub ssd: CompactString,
     #[serde(rename = "@isActive")]
     pub is_active: Option<bool>,
     #[serde(rename = "LateReason")]
@@ -89,21 +90,21 @@ pub struct TrainStatus {
 #[derive(Debug, Deserialize)]
 pub struct LateReason {
     #[serde(rename = "$value")]
-    pub value: Option<String>, // Reason Text
+    pub value: Option<CompactString>, // Reason Text
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Location {
     #[serde(rename = "@tpl")]
-    pub tiploc: Option<String>,
+    pub tiploc: Option<CompactString>,
     #[serde(rename = "@wta")]
-    pub wta: Option<String>,
+    pub wta: Option<CompactString>,
     #[serde(rename = "@wtp")]
-    pub wtp: Option<String>,
+    pub wtp: Option<CompactString>,
     #[serde(rename = "@wtd")]
-    pub wtd: Option<String>,
+    pub wtd: Option<CompactString>,
     #[serde(rename = "@ptd")]
-    pub ptd: Option<String>,
+    pub ptd: Option<CompactString>,
     #[serde(rename = "plat")]
     pub platform: Option<Platform>,
     #[serde(rename = "suppr")]
@@ -115,13 +116,13 @@ pub struct Location {
     #[serde(rename = "pass")]
     pub pass: Option<Forecast>,
     #[serde(rename = "length")]
-    pub length: Option<String>,
+    pub length: Option<CompactString>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Platform {
     #[serde(rename = "$value")]
-    pub number: Option<String>,
+    pub number: Option<CompactString>,
     #[serde(rename = "@cisPlatsup")]
     pub cis_suppressed: Option<bool>,
     #[serde(rename = "@platsup")]
@@ -129,7 +130,7 @@ pub struct Platform {
     #[serde(rename = "@conf")]
     pub conf: Option<bool>, // Confirmed
     #[serde(rename = "@platsrc")]
-    pub platsrc: Option<String>, // Source (A = Automatic, M = Manual)
+    pub platsrc: Option<CompactString>, // Source (A = Automatic, M = Manual)
     #[serde(rename = "cisPlatsup")]
     pub cis_platsup_elem: Option<bool>, // Sometimes element? (Schema says attr, but user note had element example?) No, user example had attr.
                                         // User example: <fc:plat platsup="true" cisPlatsup="true">2</fc:plat> -> attributes.
@@ -138,9 +139,9 @@ pub struct Platform {
 #[derive(Debug, Deserialize)]
 pub struct Forecast {
     #[serde(rename = "@et")]
-    pub et: Option<String>,
+    pub et: Option<CompactString>,
     #[serde(rename = "@at")]
-    pub at: Option<String>,
+    pub at: Option<CompactString>,
 }
 
 // New Types
@@ -148,11 +149,11 @@ pub struct Forecast {
 #[derive(Debug, Deserialize)]
 pub struct TrainOrder {
     #[serde(rename = "@tiploc")]
-    pub tiploc: String,
+    pub tiploc: CompactString,
     #[serde(rename = "@crs")]
-    pub crs: String,
+    pub crs: CompactString,
     #[serde(rename = "@platform")]
-    pub platform: Option<String>,
+    pub platform: Option<CompactString>,
     #[serde(rename = "set")]
     pub set: Option<TrainOrderSet>,
     #[serde(rename = "clear")]
@@ -179,31 +180,31 @@ pub struct TrainOrderItem {
     #[serde(rename = "rid")]
     pub rid: Option<TrainOrderRid>,
     #[serde(rename = "trainID")]
-    pub train_id: Option<String>,
+    pub train_id: Option<CompactString>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TrainOrderRid {
     #[serde(rename = "$value")]
-    pub value: String, // The RID
+    pub value: CompactString, // The RID
     #[serde(rename = "@wta")]
-    pub wta: Option<String>,
+    pub wta: Option<CompactString>,
     #[serde(rename = "@wtd")]
-    pub wtd: Option<String>,
+    pub wtd: Option<CompactString>,
     #[serde(rename = "@pta")]
-    pub pta: Option<String>,
+    pub pta: Option<CompactString>,
     #[serde(rename = "@ptd")]
-    pub ptd: Option<String>,
+    pub ptd: Option<CompactString>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct StationMessage {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: CompactString,
     #[serde(rename = "@cat")]
-    pub category: String,
+    pub category: CompactString,
     #[serde(rename = "Msg")]
-    pub message: String, // Msg is an element
+    pub message: CompactString, // Msg is an element
     #[serde(rename = "Station")]
     pub stations: Option<Vec<StationMessageStation>>,
 }
@@ -211,13 +212,13 @@ pub struct StationMessage {
 #[derive(Debug, Deserialize)]
 pub struct StationMessageStation {
     #[serde(rename = "@crs")]
-    pub crs: String,
+    pub crs: CompactString,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Loading {
     #[serde(rename = "@rid")]
-    pub rid: String,
+    pub rid: CompactString,
     // Add loading fields as needed
 }
 
@@ -225,9 +226,9 @@ pub struct Loading {
 #[derive(Debug, Deserialize)]
 pub struct Association {
     #[serde(rename = "@tiploc")]
-    pub tiploc: String,
+    pub tiploc: CompactString,
     #[serde(rename = "@category")]
-    pub category: String, // JJ=Join, VV=Divide, NP=NextWorking, etc.
+    pub category: CompactString, // JJ=Join, VV=Divide, NP=NextWorking, etc.
     #[serde(rename = "main")]
     pub main: AssociationService,
     #[serde(rename = "assoc")]
@@ -237,27 +238,27 @@ pub struct Association {
 #[derive(Debug, Deserialize)]
 pub struct AssociationService {
     #[serde(rename = "@rid")]
-    pub rid: String,
+    pub rid: CompactString,
     #[serde(rename = "@pta")]
-    pub pta: Option<String>,
+    pub pta: Option<CompactString>,
     #[serde(rename = "@ptd")]
-    pub ptd: Option<String>,
+    pub ptd: Option<CompactString>,
     #[serde(rename = "@wta")]
-    pub wta: Option<String>,
+    pub wta: Option<CompactString>,
     #[serde(rename = "@wtd")]
-    pub wtd: Option<String>,
+    pub wtd: Option<CompactString>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TrainAlert {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: CompactString,
     // Alert logic is complex, often involves referencing other alerts or messages.
     // Placeholder for now sufficient until specific alert logic requested?
     // User requested "Fill in the other placeholder types".
     // Basic structure:
     #[serde(rename = "AlertWithdrawn")]
-    pub withdrawn: Option<String>, // Element
+    pub withdrawn: Option<CompactString>, // Element
     #[serde(rename = "AlertService")]
     pub service: Option<Vec<AlertService>>,
 }
@@ -265,15 +266,15 @@ pub struct TrainAlert {
 #[derive(Debug, Deserialize)]
 pub struct AlertService {
     #[serde(rename = "@rid")]
-    pub rid: String,
+    pub rid: CompactString,
     #[serde(rename = "Location")]
-    pub location: Option<Vec<String>>, // Tpl
+    pub location: Option<Vec<CompactString>>, // Tpl
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TrackingId {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: CompactString,
     #[serde(rename = "@correct")]
     pub correct: bool, // "true" or "false"
 }
@@ -281,11 +282,11 @@ pub struct TrackingId {
 #[derive(Debug, Deserialize)]
 pub struct RTTIAlarm {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: CompactString,
     #[serde(rename = "set")]
     pub set: Option<RTTIAlarmSet>,
     #[serde(rename = "clear")]
-    pub clear: Option<String>, // Element value is ID usually? Or empty? Wiki says "clear element and the same unique identifier".
+    pub clear: Option<CompactString>, // Element value is ID usually? Or empty? Wiki says "clear element and the same unique identifier".
 }
 
 #[derive(Debug, Deserialize)]
