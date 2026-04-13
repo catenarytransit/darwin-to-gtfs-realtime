@@ -389,16 +389,62 @@ fn parse_time(f: &crate::darwin_types::Forecast, ssd: &str) -> Option<StopTimeEv
     let date = NaiveDate::parse_from_str(ssd, "%Y-%m-%d").ok()?;
     let dt = date.and_hms_opt(hour, min, 0)?;
 
-    // Handle day rollover?
-    // If dt < ssd (time-wise) it's likely +1 day.
-    // But ssd is just date.
-
-    // We convert to UTC timestamp
-    // Assuming Utc for now to compile, but note this gap.
-    let ts = dt.and_utc().timestamp();
+    // Darwin times are UK local time (Europe/London), not UTC.
+    // Convert local wall-clock time to a Unix timestamp with DST awareness.
+    let ts = match London.from_local_datetime(&dt) {
+        chrono::LocalResult::Single(local_dt) => local_dt.timestamp(),
+        chrono::LocalResult::Ambiguous(earliest, _) => earliest.timestamp(),
+        chrono::LocalResult::None => {
+            // Spring-forward DST gap: move forward one hour to the next valid local instant.
+            let shifted = dt + Duration::hours(1);
+            London.from_local_datetime(&shifted).earliest()?.timestamp()
+        }
+    };
 
     let mut event = StopTimeEvent::default();
     event.time = Some(ts);
     // Remove uncertainty for now
     Some(event)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_time;
+    use crate::darwin_types::Forecast;
+    use chrono::{TimeZone, Utc};
+
+    #[test]
+    fn parse_time_uses_london_timezone_in_winter() {
+        let f = Forecast {
+            et: Some("12:00".into()),
+            at: None,
+        };
+
+        let event = parse_time(&f, "2026-01-15").expect("expected parsed event");
+        let expected = Utc
+            .with_ymd_and_hms(2026, 1, 15, 12, 0, 0)
+            .single()
+            .expect("valid UTC datetime")
+            .timestamp();
+
+        assert_eq!(event.time, Some(expected));
+    }
+
+    #[test]
+    fn parse_time_uses_london_timezone_in_summer_bst() {
+        let f = Forecast {
+            et: Some("12:00".into()),
+            at: None,
+        };
+
+        let event = parse_time(&f, "2026-07-15").expect("expected parsed event");
+        // 12:00 in London during BST is 11:00 UTC.
+        let expected = Utc
+            .with_ymd_and_hms(2026, 7, 15, 11, 0, 0)
+            .single()
+            .expect("valid UTC datetime")
+            .timestamp();
+
+        assert_eq!(event.time, Some(expected));
+    }
 }
