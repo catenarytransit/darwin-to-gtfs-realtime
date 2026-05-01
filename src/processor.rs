@@ -27,26 +27,39 @@ pub fn process_pmap(pport: Pport, state: &AppState) {
         for load in ur.loading.iter().chain(ur.loading_alias.iter()) {
             process_loading(load, state);
         }
-        for formation in ur.formation {
-            process_formation(&formation, state);
+        for schedule_formation in ur.schedule_formations {
+            process_formation(&schedule_formation, state);
         }
     }
     // We currently ignore schedule_record (sR) as we rely on static GTFS for basic schedule
     // and uR for updates.
 }
 
-fn process_formation(formation: &crate::darwin_types::Formation, state: &AppState) {
-    if let Some(trip_id) = state.rid_to_trip_id.get(&formation.rid) {
-        let label = formation
-            .coaches
-            .iter()
-            .map(|c| c.number.clone())
-            .collect::<Vec<_>>()
-            .join("-");
+fn process_formation(schedule_formation: &crate::formations::ScheduleFormations, state: &AppState) {
+    state
+        .formations
+        .insert(schedule_formation.rid.clone(), schedule_formation.clone());
+
+    if let Some(trip_id) = state.rid_to_trip_id.get(&schedule_formation.rid) {
+        let mut labels = Vec::new();
+        for f in &schedule_formation.formations {
+            let label = f
+                .coaches
+                .coaches
+                .iter()
+                .map(|c| c.coach_number.clone())
+                .collect::<Vec<_>>()
+                .join("-");
+            if !label.is_empty() {
+                labels.push(label);
+            }
+        }
+
+        let label = labels.join(" / ");
 
         println!(
             "Processed Formation for RID: {}, Label: {}",
-            formation.rid, label
+            schedule_formation.rid, label
         );
 
         // Update TripUpdate

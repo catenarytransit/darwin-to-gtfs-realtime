@@ -29,8 +29,8 @@ pub struct UpdateRecord {
 
     #[serde(rename = "association", default)]
     pub association: Vec<Association>,
-    #[serde(rename = "formation", default)]
-    pub formation: Vec<Formation>,
+    #[serde(rename = "scheduleFormations", default)]
+    pub schedule_formations: Vec<crate::formations::ScheduleFormations>,
     #[serde(rename = "trainAlert", default)]
     pub train_alert: Vec<TrainAlert>,
     #[serde(rename = "trackingId", default)]

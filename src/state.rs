@@ -25,6 +25,9 @@ pub struct AppState {
     // Map TripID -> List of Platform Info (V2 Schema)
     pub platforms_v2: DashMap<CompactString, Vec<PlatformInfo>>,
 
+    // Map RID -> Formations
+    pub formations: DashMap<CompactString, crate::formations::ScheduleFormations>,
+
     // Map Station CRS -> List of Messages
     // For simplicity, we might just store all messages, or map by ID.
     // Let's map by Message ID for now to avoid duplications, or by Station CRS.
@@ -44,6 +47,7 @@ impl AppState {
             trip_updates: DashMap::new(),
             // platforms: DashMap::new(), REMOVED
             platforms_v2: DashMap::new(),
+            formations: DashMap::new(),
             station_messages: DashMap::new(),
             rid_to_trip_id: DashMap::new(),
             gtfs: GTFSManager::new(gtfs_url),

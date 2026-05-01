@@ -1,3 +1,4 @@
+pub mod formations;
 use anyhow::Result;
 use chrono::Utc;
 use flate2::read::GzDecoder;
@@ -111,9 +112,22 @@ async fn main() -> Result<()> {
             warp::reply::json(&data)
         });
 
+    // GET /formations
+    let formations_route = warp::path("formations")
+        .and(warp::get())
+        .and(state_filter.clone())
+        .map(|state: Arc<AppState>| {
+            let mut data = std::collections::HashMap::new();
+            for r in state.formations.iter() {
+                data.insert(r.key().clone(), r.value().clone());
+            }
+            warp::reply::json(&data)
+        });
+
     let routes = gtfs_rt_route
         // .or(platforms_route) REMOVED
         .or(platforms_v2_route)
+        .or(formations_route)
         .boxed();
 
     let server_port: u16 = std::env::var("PORT")
