@@ -76,6 +76,41 @@ pub fn cleanup_old_trips(state: &AppState, threshold: Duration) {
 
         println!("GC: Cleanup complete.");
     }
+
+    // GC for formations
+    // "only if the trip has already passed and the departures were more than 24hrs ago"
+    // RIDs start with YYYYMMDD. We can use this to reliably determine if it's an old schedule.
+    let mut formations_to_remove: Vec<CompactString> = Vec::new();
+    for r in state.formations.iter() {
+        let rid = r.key();
+        if rid.len() >= 8 {
+            if let Ok(schedule_date) = chrono::NaiveDate::parse_from_str(&rid[0..8], "%Y%m%d") {
+                // schedule_date is the YYYYMMDD of the trip.
+                // The trip could depart at 23:59 that day.
+                // So max departure could be schedule date + 24 hours.
+                // We want to remove if those departures were > 48 hours ago.
+                // Therefore, if now > schedule_date at midnight + 72 hours.
+                let schedule_timestamp = schedule_date
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap_or_default()
+                    .and_utc()
+                    .timestamp();
+
+                // 3 days * 24 hours * 3600 seconds = 259200
+                if now > schedule_timestamp + 259200 {
+                    formations_to_remove.push(rid.clone());
+                }
+            }
+        }
+    }
+
+    let f_count = formations_to_remove.len();
+    if f_count > 0 {
+        println!("GC: Found {} expired formations. Cleaning up...", f_count);
+        for rid in formations_to_remove {
+            state.formations.remove(&rid);
+        }
+    }
 }
 
 #[cfg(test)]
