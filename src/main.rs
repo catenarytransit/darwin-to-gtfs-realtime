@@ -124,10 +124,23 @@ async fn main() -> Result<()> {
             warp::reply::json(&data)
         });
 
+    // GET /rid-to-trip-id
+    let rid_to_trip_id_route = warp::path("rid-to-trip-id")
+        .and(warp::get())
+        .and(state_filter.clone())
+        .map(|state: Arc<AppState>| {
+            let mut data = std::collections::HashMap::new();
+            for r in state.rid_to_trip_id.iter() {
+                data.insert(r.key().clone(), r.value().clone());
+            }
+            warp::reply::json(&data)
+        });
+
     let routes = gtfs_rt_route
         // .or(platforms_route) REMOVED
         .or(platforms_v2_route)
         .or(formations_route)
+        .or(rid_to_trip_id_route)
         .boxed();
 
     let server_port: u16 = std::env::var("PORT")
