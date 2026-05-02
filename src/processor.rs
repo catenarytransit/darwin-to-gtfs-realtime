@@ -35,7 +35,7 @@ pub fn process_pmap(pport: Pport, state: &AppState) {
     // and uR for updates.
 }
 
-fn process_formation(schedule_formation: &crate::formations::ScheduleFormations, state: &AppState) {
+fn process_formation(schedule_formation: &crate::formations::v2::ScheduleFormations, state: &AppState) {
     state
         .formations
         .insert(schedule_formation.rid.clone(), schedule_formation.clone());

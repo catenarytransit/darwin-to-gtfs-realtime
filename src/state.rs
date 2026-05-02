@@ -26,7 +26,7 @@ pub struct AppState {
     pub platforms_v2: DashMap<CompactString, Vec<PlatformInfo>>,
 
     // Map RID -> Formations
-    pub formations: DashMap<CompactString, crate::formations::ScheduleFormations>,
+    pub formations: DashMap<CompactString, crate::formations::v2::ScheduleFormations>,
 
     // Map Station CRS -> List of Messages
     // For simplicity, we might just store all messages, or map by ID.

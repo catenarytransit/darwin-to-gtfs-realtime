@@ -124,6 +124,19 @@ async fn main() -> Result<()> {
             warp::reply::json(&data)
         });
 
+    // GET /formations-v1
+    let formations_v1_route = warp::path("formations-v1")
+        .and(warp::get())
+        .and(state_filter.clone())
+        .map(|state: Arc<AppState>| {
+            let mut data = std::collections::HashMap::new();
+            for r in state.formations.iter() {
+                let v1_formation: crate::formations::v1::ScheduleFormations = r.value().clone().into();
+                data.insert(r.key().clone(), v1_formation);
+            }
+            warp::reply::json(&data)
+        });
+
     // GET /rid-to-trip-id
     let rid_to_trip_id_route = warp::path("rid-to-trip-id")
         .and(warp::get())
@@ -140,6 +153,7 @@ async fn main() -> Result<()> {
         // .or(platforms_route) REMOVED
         .or(platforms_v2_route)
         .or(formations_route)
+        .or(formations_v1_route)
         .or(rid_to_trip_id_route)
         .boxed();
 
