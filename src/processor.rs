@@ -35,61 +35,15 @@ pub fn process_pmap(pport: Pport, state: &AppState) {
     // and uR for updates.
 }
 
-fn process_formation(schedule_formation: &crate::formations::v2::ScheduleFormations, state: &AppState) {
+fn process_formation(
+    schedule_formation: &crate::formations::v2::ScheduleFormations,
+    state: &AppState,
+) {
     state
         .formations
         .insert(schedule_formation.rid.clone(), schedule_formation.clone());
 
-    if let Some(trip_id) = state.rid_to_trip_id.get(&schedule_formation.rid) {
-        let mut labels = Vec::new();
-        for f in &schedule_formation.formations {
-            let label = f
-                .coaches
-                .coaches
-                .iter()
-                .map(|c| c.coach_number.clone())
-                .collect::<Vec<_>>()
-                .join("-");
-            if !label.is_empty() {
-                labels.push(label);
-            }
-        }
-
-        let label = labels.join(" / ");
-
-        println!(
-            "Processed Formation for RID: {}, Label: {}",
-            schedule_formation.rid, label
-        );
-
-        // Update TripUpdate
-        if let Some(mut entity) = state.trip_updates.get_mut(trip_id.value()) {
-            if let Some(tu) = entity.trip_update.as_mut() {
-                let mut vehicle = tu.vehicle.clone().unwrap_or_default();
-                vehicle.label = Some(label.clone());
-                tu.vehicle = Some(vehicle);
-            }
-        }
-
-        // Update VehiclePosition
-        let vp_key = CompactString::from(format!("{}_VP", trip_id.as_str()));
-        let mut entity = state.trip_updates.entry(vp_key.clone()).or_insert_with(|| {
-            let mut fe = FeedEntity::default();
-            fe.id = vp_key.to_string();
-            let mut vp = VehiclePosition::default();
-            let mut td = gtfs_realtime::TripDescriptor::default();
-            td.trip_id = Some(trip_id.to_string());
-            vp.trip = Some(td);
-            fe.vehicle = Some(vp);
-            fe
-        });
-
-        if let Some(vp) = entity.vehicle.as_mut() {
-            let mut descriptor = vp.vehicle.clone().unwrap_or_default();
-            descriptor.label = Some(label);
-            vp.vehicle = Some(descriptor);
-        }
-    }
+    println!("Processed Formation for RID: {}", schedule_formation.rid);
 }
 
 fn update_trip(ts: &TrainStatus, state: &AppState) {

@@ -131,7 +131,8 @@ async fn main() -> Result<()> {
         .map(|state: Arc<AppState>| {
             let mut data = std::collections::HashMap::new();
             for r in state.formations.iter() {
-                let v1_formation: crate::formations::v1::ScheduleFormations = r.value().clone().into();
+                let v1_formation: crate::formations::v1::ScheduleFormations =
+                    r.value().clone().into();
                 data.insert(r.key().clone(), v1_formation);
             }
             warp::reply::json(&data)
