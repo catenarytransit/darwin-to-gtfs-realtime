@@ -38,7 +38,7 @@ pub fn save_state(state: &AppState, dir: &str) -> Result<()> {
     let f = File::create(platforms_v2_path)?;
     bincode::serialize_into(f, &v2_map)?;
 
-    // 3. Save Formations (Bincode)
+    // 3. Save Formations V2 (Bincode)
     let formations_path = format!("{}/formations.bin", dir);
     let mut formations_map = std::collections::HashMap::new();
     for r in state.formations.iter() {
@@ -46,6 +46,18 @@ pub fn save_state(state: &AppState, dir: &str) -> Result<()> {
     }
     let f = File::create(formations_path)?;
     bincode::serialize_into(f, &formations_map)?;
+
+    // 4. Save Formations V1 (Bincode)
+    let formations_v1_path = format!("{}/formations_v1.bin", dir);
+    let mut formations_v1_map = std::collections::HashMap::new();
+    for r in state.formations.iter() {
+        formations_v1_map.insert(
+            r.key().clone(),
+            crate::formations::v1::ScheduleFormations::from(r.value().clone()),
+        );
+    }
+    let f_v1 = File::create(formations_v1_path)?;
+    bincode::serialize_into(f_v1, &formations_v1_map)?;
 
     Ok(())
 }
@@ -85,14 +97,20 @@ pub fn load_state(state: &AppState, dir: &str) -> Result<()> {
         );
     }
 
-    // 3. Save Formations (Bincode)
+    // 3. Load Formations (Bincode)
     let formations_path = format!("{}/formations.bin", dir);
-    let mut formations_map = std::collections::HashMap::new();
-    for r in state.formations.iter() {
-        formations_map.insert(r.key().clone(), r.value().clone());
+    if Path::new(&formations_path).exists() {
+        let f = File::open(formations_path)?;
+        let formations_map: std::collections::HashMap<
+            CompactString,
+            crate::formations::v2::ScheduleFormations,
+        > = bincode::deserialize_from(f)?;
+
+        for (rid, formation) in formations_map {
+            state.formations.insert(rid, formation);
+        }
+        println!("Loaded {} formations.", state.formations.len());
     }
-    let f = File::create(formations_path)?;
-    bincode::serialize_into(f, &formations_map)?;
 
     Ok(())
 }
