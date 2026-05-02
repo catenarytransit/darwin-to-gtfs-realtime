@@ -38,6 +38,15 @@ pub fn save_state(state: &AppState, dir: &str) -> Result<()> {
     let f = File::create(platforms_v2_path)?;
     bincode::serialize_into(f, &v2_map)?;
 
+    // 3. Save Formations (Bincode)
+    let formations_path = format!("{}/formations.bin", dir);
+    let mut formations_map = std::collections::HashMap::new();
+    for r in state.formations.iter() {
+        formations_map.insert(r.key().clone(), r.value().clone());
+    }
+    let f = File::create(formations_path)?;
+    bincode::serialize_into(f, &formations_map)?;
+
     Ok(())
 }
 
@@ -75,6 +84,15 @@ pub fn load_state(state: &AppState, dir: &str) -> Result<()> {
             state.platforms_v2.len()
         );
     }
+
+    // 3. Save Formations (Bincode)
+    let formations_path = format!("{}/formations.bin", dir);
+    let mut formations_map = std::collections::HashMap::new();
+    for r in state.formations.iter() {
+        formations_map.insert(r.key().clone(), r.value().clone());
+    }
+    let f = File::create(formations_path)?;
+    bincode::serialize_into(f, &formations_map)?;
 
     Ok(())
 }
