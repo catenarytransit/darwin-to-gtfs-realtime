@@ -27,9 +27,14 @@ use persistence::{load_state, save_state};
 use processor::process_pmap;
 use state::AppState;
 
+ use std::sync::LazyLock;
+
 // GTFS URL provided by Catenary
 const GTFS_URL: &str = "https://github.com/catenarytransit/pfaedled-gtfs-actions/releases/download/latest/nationalrailuk.zip";
 const DATA_DIR: &str = "./data";
+
+static NS_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"ns\d+:").unwrap());
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -326,8 +331,7 @@ fn process_frame_bytes(body: &[u8], state: &AppState) -> Result<()> {
         return Ok(());
     }
     // Strip XML namespaces (e.g., ns5:Location -> Location) to satisfy Serde
-    let re = regex::Regex::new(r"ns\d+:").unwrap();
-    let clean_xml = re.replace_all(&xml_string, "");
+    let clean_xml = NS_RE.replace_all(&xml_string, "");
 
     let pport: Pport = match from_str(&clean_xml) {
         Ok(p) => p,
@@ -339,4 +343,17 @@ fn process_frame_bytes(body: &[u8], state: &AppState) -> Result<()> {
     };
     process_pmap(pport, state);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ns_re_compiles_and_works() {
+        let input = r#"<ns5:Location wta="08:24"><ns5:Platform>1</ns5:Platform></ns5:Location>"#;
+        let expected = r#"<Location wta="08:24"><Platform>1</Platform></Location>"#;
+        let clean = NS_RE.replace_all(input, "");
+        assert_eq!(clean, expected);
+    }
 }

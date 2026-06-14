@@ -89,7 +89,8 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
 
             // 2. Construct naive datetime (Local/London time) based on SSD + StartTime
             // SSD is the "Schedule Date", adding start_secs gives the actual Start Time in UK Local.
-            let initial_dt = date_parsed.and_hms_opt(0, 0, 0).unwrap_or_default()
+            let initial_dt = date_parsed.and_hms_opt(12, 0, 0).unwrap_or_default()
+                - Duration::hours(12)
                 + Duration::seconds(start_secs as i64);
 
             // 3. Convert/Ensure it's London Time (mostly for correctness of date boundary)
