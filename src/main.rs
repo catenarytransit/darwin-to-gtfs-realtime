@@ -36,6 +36,14 @@ const DATA_DIR: &str = "./data";
 static NS_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"ns\d+:").unwrap());
 
+
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Initialize State
