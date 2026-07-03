@@ -26,3 +26,4 @@ zip = "6.0"
 chrono-tz = "0.10.4"
 bincode = "1.3"
 compact_str = { version = "0.9.0", features = ["serde"] }
+tikv-jemallocator = "0.7.0"
