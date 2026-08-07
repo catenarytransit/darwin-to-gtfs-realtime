@@ -73,6 +73,11 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
     let trip_stops = state.gtfs.get_trip_stops(&trip_id).unwrap_or_default();
     let mut current_static_idx = 0;
 
+    // Static GTFS may encode trips after midnight using times >= 24:00:00. Keep
+    // that information for resolving Darwin's HH:MM-only realtime timestamps, but
+    // do not use it to move the GTFS-RT start_date away from the service date.
+    let trip_start_secs = state.gtfs.get_trip_start_time(&trip_id).unwrap_or(0);
+
     // 2. Prepare GTFS-RT Entity
     let mut entity = state
         .trip_updates
@@ -83,27 +88,12 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
             let mut tu = TripUpdate::default();
             tu.trip.trip_id = Some(trip_id.to_string());
 
-            // Correct Start Date Calculation
-            // 1. Get trip start time from static GTFS (seconds from midnight)
-            let start_secs = state.gtfs.get_trip_start_time(&trip_id).unwrap_or(0);
+            // GTFS-RT start_date is the GTFS service date (the date used to select
+            // the static service), not necessarily the civil date of the first stop.
+            // In static GTFS, after-midnight stop_times are commonly >= 24:00:00.
+            // Adding those seconds to SSD incorrectly advances start_date by a day.
+            tu.trip.start_date = Some(date_parsed.format("%Y%m%d").to_string());
 
-            // 2. Construct naive datetime (Local/London time) based on SSD + StartTime
-            // SSD is the "Schedule Date", adding start_secs gives the actual Start Time in UK Local.
-            let initial_dt = date_parsed.and_hms_opt(12, 0, 0).unwrap_or_default()
-                - Duration::hours(12)
-                + Duration::seconds(start_secs as i64);
-
-            // 3. Convert/Ensure it's London Time (mostly for correctness of date boundary)
-            // Using latest() to handle ambiguity; fallback to naive date if invalid (gap).
-            let correct_date_str = London
-                .from_local_datetime(&initial_dt)
-                .latest()
-                .map(|dt| dt.date_naive())
-                .unwrap_or_else(|| initial_dt.date())
-                .format("%Y%m%d")
-                .to_string();
-
-            tu.trip.start_date = Some(correct_date_str);
             // route_id? We don't have it easily. gtfs-rt spec says optional if trip_id is unique.
             fe.trip_update = Some(tu);
             fe
@@ -159,7 +149,13 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
 
                 // Delay / Time Logic
                 if has_time_data(loc) {
-                    let stu = build_stop_time_update(loc, &stop_id, &ts.ssd, found_seq);
+                    let stu = build_stop_time_update(
+                        loc,
+                        &stop_id,
+                        &ts.ssd,
+                        found_seq,
+                        trip_start_secs,
+                    );
 
                     // Update Logic: Prefer sequence match if available
                     if let Some(seq) = found_seq {
@@ -324,16 +320,18 @@ fn build_stop_time_update(
     stop_id: &str,
     ssd: &str,
     seq: Option<u32>,
+    trip_start_secs: u32,
 ) -> StopTimeUpdate {
     let mut stu = StopTimeUpdate::default();
     stu.stop_id = Some(stop_id.to_string());
     stu.stop_sequence = seq;
 
     if let Some(arr) = &loc.arr {
-        stu.arrival = parse_time(arr, ssd);
+        stu.arrival = parse_time(arr, ssd, loc.wta.as_deref(), trip_start_secs);
     }
     if let Some(dep) = &loc.dep {
-        stu.departure = parse_time(dep, ssd);
+        let scheduled_departure = loc.wtd.as_deref().or(loc.ptd.as_deref());
+        stu.departure = parse_time(dep, ssd, scheduled_departure, trip_start_secs);
     } else if let Some(_pass) = &loc.pass {
         // Ignored
     }
@@ -341,20 +339,50 @@ fn build_stop_time_update(
     stu
 }
 
-fn parse_time(f: &crate::darwin_types::Forecast, ssd: &str) -> Option<StopTimeEvent> {
-    let time_str = f.at.as_ref().or(f.et.as_ref())?;
+fn parse_hm(time_str: &str) -> Option<(u32, u32)> {
+    let mut parts = time_str.split(':');
+    let hour: u32 = parts.next()?.parse().ok()?;
+    let min: u32 = parts.next()?.parse().ok()?;
 
-    // format HH:MM
-    let hm: Vec<&str> = time_str.split(':').collect();
-    if hm.len() != 2 {
+    if hour > 23 || min > 59 {
         return None;
     }
-    let hour: u32 = hm[0].parse().ok()?;
-    let min: u32 = hm[1].parse().ok()?;
 
-    // We need complete date.
-    // SSD is YYYY-MM-DD
-    let date = NaiveDate::parse_from_str(ssd, "%Y-%m-%d").ok()?;
+    Some((hour, min))
+}
+
+fn parse_time(
+    f: &crate::darwin_types::Forecast,
+    ssd: &str,
+    scheduled_time: Option<&str>,
+    trip_start_secs: u32,
+) -> Option<StopTimeEvent> {
+    let time_str = f.at.as_ref().or(f.et.as_ref())?;
+    let (hour, min) = parse_hm(time_str)?;
+
+    // SSD is the GTFS service date. Darwin realtime times contain only HH:MM, so
+    // recover the civil-day offset using the static trip start plus the scheduled
+    // time at this location. A >12h backwards jump means the clock crossed midnight.
+    let mut day_offset = trip_start_secs / 86_400;
+    let trip_start_minute = (trip_start_secs % 86_400) / 60;
+    let forecast_minute = hour * 60 + min;
+
+    if let Some((scheduled_hour, scheduled_min)) = scheduled_time.and_then(parse_hm) {
+        let scheduled_minute = scheduled_hour * 60 + scheduled_min;
+
+        if scheduled_minute + 12 * 60 < trip_start_minute {
+            day_offset += 1;
+        }
+        if forecast_minute + 12 * 60 < scheduled_minute {
+            day_offset += 1;
+        }
+    } else if forecast_minute + 12 * 60 < trip_start_minute {
+        day_offset += 1;
+    }
+
+    let date = NaiveDate::parse_from_str(ssd, "%Y-%m-%d")
+        .ok()?
+        .checked_add_signed(Duration::days(day_offset as i64))?;
     let dt = date.and_hms_opt(hour, min, 0)?;
 
     // Darwin times are UK local time (Europe/London), not UTC.
@@ -388,7 +416,7 @@ mod tests {
             at: None,
         };
 
-        let event = parse_time(&f, "2026-01-15").expect("expected parsed event");
+        let event = parse_time(&f, "2026-01-15", None, 0).expect("expected parsed event");
         let expected = Utc
             .with_ymd_and_hms(2026, 1, 15, 12, 0, 0)
             .single()
@@ -405,7 +433,7 @@ mod tests {
             at: None,
         };
 
-        let event = parse_time(&f, "2026-07-15").expect("expected parsed event");
+        let event = parse_time(&f, "2026-07-15", None, 0).expect("expected parsed event");
         // 12:00 in London during BST is 11:00 UTC.
         let expected = Utc
             .with_ymd_and_hms(2026, 7, 15, 11, 0, 0)
@@ -415,4 +443,44 @@ mod tests {
 
         assert_eq!(event.time, Some(expected));
     }
+    #[test]
+    fn parse_time_rolls_forecast_over_midnight() {
+        let f = Forecast {
+            et: Some("00:12".into()),
+            at: None,
+        };
+
+        // A 23:11 scheduled stop reported as 00:12 is 61 minutes late on the next day,
+        // not 22h59 early on the service date.
+        let event = parse_time(&f, "2026-08-07", Some("23:11"), 21 * 60 * 60)
+            .expect("expected parsed event");
+        let expected = Utc
+            .with_ymd_and_hms(2026, 8, 7, 23, 12, 0)
+            .single()
+            .expect("valid UTC datetime")
+            .timestamp();
+
+        // 00:12 Europe/London on Aug 8 is 23:12 UTC on Aug 7 during BST.
+        assert_eq!(event.time, Some(expected));
+    }
+
+    #[test]
+    fn parse_time_respects_static_after_midnight_trip_start() {
+        let f = Forecast {
+            et: Some("00:12".into()),
+            at: None,
+        };
+
+        // 24:05 in static GTFS means 00:05 on the civil day after the service date.
+        let event = parse_time(&f, "2026-08-07", Some("00:10"), 24 * 60 * 60 + 5 * 60)
+            .expect("expected parsed event");
+        let expected = Utc
+            .with_ymd_and_hms(2026, 8, 7, 23, 12, 0)
+            .single()
+            .expect("valid UTC datetime")
+            .timestamp();
+
+        assert_eq!(event.time, Some(expected));
+    }
+
 }
