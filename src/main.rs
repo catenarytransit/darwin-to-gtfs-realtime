@@ -21,6 +21,7 @@ mod persistence;
 mod processor;
 mod state;
 mod static_data;
+mod maple_syrup;
 
 use darwin_types::Pport;
 use persistence::{load_state, save_state};
