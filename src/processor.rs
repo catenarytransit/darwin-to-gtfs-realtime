@@ -51,13 +51,11 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
     let date_parsed =
         NaiveDate::parse_from_str(&ts.ssd, "%Y-%m-%d").unwrap_or_else(|_| Utc::now().date_naive());
 
-    let trip_id = if let Some(found_id) = state.gtfs.find_trip_id(&ts.uid, date_parsed) {
-        // println!("Match found: {} -> {}", ts.uid, found_id);
-        found_id
-    } else {
+    let Some(matched) = state.gtfs.find_matching_trip(&ts.uid, date_parsed) else {
         println!("No static match for UID: {} on {}", ts.uid, ts.ssd);
         return;
     };
+    let trip_id = matched.trip_id.clone();
 
     // Update RID mapping
     state.rid_to_trip_id.insert(ts.rid.clone(), trip_id.clone());
@@ -67,16 +65,14 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
         ts.rid, trip_id
     );
 
-    // Fetch static stop sequence for loop handling
-    // We assume the static stops are sorted by sequence, or we iterate in order.
-    // Darwin locations usually come in order.
-    let trip_stops = state.gtfs.get_trip_stops(&trip_id).unwrap_or_default();
+    // The shared stop pattern is immutable and indexed by stop ID; a cursor
+    // preserves forward matching for stations visited repeatedly on loop trips.
     let mut current_static_idx = 0;
 
     // Static GTFS may encode trips after midnight using times >= 24:00:00. Keep
     // that information for resolving Darwin's HH:MM-only realtime timestamps, but
     // do not use it to move the GTFS-RT start_date away from the service date.
-    let trip_start_secs = state.gtfs.get_trip_start_time(&trip_id).unwrap_or(0);
+    let trip_start_secs = matched.trip_start_seconds;
 
     // 2. Prepare GTFS-RT Entity
     let mut entity = state
@@ -114,16 +110,7 @@ fn update_trip(ts: &TrainStatus, state: &AppState) {
 
             if let Some(stop_id) = stop_id_opt {
                 // Find matching sequence (Forward greedy match)
-                let mut found_seq = None;
-                if !trip_stops.is_empty() {
-                    for i in current_static_idx..trip_stops.len() {
-                        if trip_stops[i].0 == stop_id {
-                            found_seq = Some(trip_stops[i].1);
-                            current_static_idx = i + 1; // Advance
-                            break;
-                        }
-                    }
-                }
+                let found_seq = matched.next_stop_sequence(&stop_id, &mut current_static_idx);
 
                 // Platform Logic
                 if let Some(plat) = &loc.platform {
